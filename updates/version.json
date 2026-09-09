@@ -1,15 +1,15 @@
 {
   "product": "MonOS",
   "channel": "stable",
-  "version": "1.0.0",
-  "release_tag": "v1.0.0",
+  "version": "1.0.1",
+  "release_tag": "v1.0.1",
   "minimum_version": "1.0.0",
-  "image": "MonOS-1.0.0.img",
-  "sha256": "df93b82eb6018631680e862bc4c600964d1e0300999694ba029a0cded036e733",
+  "image": "MonOS-1.0.1.img",
+  "sha256": "7b90df61f61f6e22457257b1e31a7c3606b74c934b5b640e8dd4ab040c322a63",
   "size": 5120000,
   "release_notes": [
-    "MonOS 1.0.0 - premiere version stable",
-    "Boot init -> shell fonctionnel",
-    "Robots de mise a jour actifs"
+    "kernel nettoyé",
+    "build mono-disque",
+    "prêt test download SHA-256"
   ]
 }
