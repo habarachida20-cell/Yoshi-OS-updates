@@ -1,0 +1,13 @@
+# Artefacts de simulation hote (jamais a pousser)
+monos_slot_*.img
+monos_bootmeta.cfg
+monos_updates.log
+
+# Binaires
+*.exe
+*.o
+*.obj
+
+# Outils système
+Thumbs.db
+.DS_Store

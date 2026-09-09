@@ -1,0 +1,123 @@
+name: check-release
+
+on:
+  release:
+    types: [published, edited]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Inspecter l'événement release (prerelease/draft/tag)
+        run: |
+          python3 - <<'PY'
+          import json, os, re, sys
+          ev = json.load(open(os.environ['GITHUB_EVENT_PATH'], encoding='utf-8'))
+          rel = ev.get('release') or {}
+          tag = rel.get('tag_name', '')
+          draft = rel.get('draft', False)
+          prerelease = rel.get('prerelease', False)
+          print(f"tag={tag} draft={draft} prerelease={prerelease}")
+
+          if not tag:
+              sys.exit("pas de tag_name : événement invalide")
+          if draft:
+              sys.exit("draft : ignorée (le canal automatique ne l'accepte pas)")
+          if prerelease:
+              sys.exit("PRERELEASE REFUSÉE — le canal stable ne prend jamais "
+                       "une version alpha/beta/rc/testing/unstable/development")
+          if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag):
+              sys.exit(f"tag non-semver vX.Y.Z : {tag!r}")
+          version = tag.lstrip('v')
+          open('_tag', 'w').write(tag)
+          open('_version', 'w').write(version)
+          PY
+
+      - name: Récupérer les assets de la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(cat _tag)
+          gh release view "$TAG" --json assets \
+            --jq '.assets[] | .name' > _assets.txt
+          mkdir -p _rel
+          gh release download "$TAG" --dir _rel --pattern '*.img'
+          gh release download "$TAG" --dir _rel --pattern 'version.json'
+          gh release download "$TAG" --dir _rel --pattern 'SHA256SUMS'
+          gh release download "$TAG" --dir _rel --pattern '*.sig' || true
+          echo "assets:"; sed 's/^/  /' _assets.txt
+
+      - name: Vérouiller cohérence tag/image/manifeste/SHA-256
+        run: |
+          python3 - <<'PY'
+          import glob, hashlib, json, os, re, sys
+          version = open('_version').read().strip()
+          tag = open('_tag').read().strip()
+          assets = [l.strip() for l in open('_assets.txt') if l.strip()]
+
+          # 1) image attendue présente et de taille > 0
+          image = f'MonOS-{version}.img'
+          if image not in assets:
+              sys.exit(f"asset image manquant : {image} (assets={assets})")
+          imgs = glob.glob('_rel/*.img')
+          if not imgs:
+              sys.exit("image non téléchargée")
+          size = os.path.getsize(imgs[0])
+          if size <= 0:
+              sys.exit(f"image de taille invalide : {size}")
+
+          # 2) version.json présent, valide, cohérent avec le tag
+          if 'version.json' not in assets:
+              sys.exit('asset version.json manquant')
+          m = json.load(open('_rel/version.json', encoding='utf-8'))
+          if m['product'] != 'MonOS':
+              sys.exit('product != MonOS')
+          if m['channel'] != 'stable':
+              sys.exit('channel != stable')
+          if m['version'] != version:
+              sys.exit(f"version.json {m['version']} != tag {tag}")
+          if m['release_tag'] != tag:
+              sys.exit(f"release_tag {m['release_tag']} != tag {tag}")
+          if m['image'] != image:
+              sys.exit(f"image manifeste {m['image']} != {image}")
+          if m['size'] != size:
+              sys.exit(f"size manifeste {m['size']} != image réelle {size}")
+          if not re.fullmatch(r'[0-9a-fA-F]{64}', m['sha256']):
+              sys.exit('sha256 manifeste non-hexadécimale (64)')
+
+          # 3) SHA-256 réel de l'image == manifeste == SHA256SUMS
+          h = hashlib.sha256()
+          with open(imgs[0], 'rb') as f:
+              for chunk in iter(lambda: f.read(1 << 20), b''):
+                  h.update(chunk)
+          real = h.hexdigest()
+          if real != m['sha256'].lower():
+              sys.exit(f"SHA-256 réel {real} != manifeste {m['sha256']}")
+
+          sums = open('_rel/SHA256SUMS', encoding='utf-8').read()
+          if not re.search(rf'^{re.escape(m["sha256"])}\s+(\./)?{re.escape(image)}\s*$',
+                           sums, re.M):
+              sys.exit("SHA256SUMS incoherent avec l image")
+
+          # 4) signature Ed25519 recommandée (non bloquante si absente au debut)
+          sig = glob.glob('_rel/*.sig')
+          if not sig:
+              print('AVERTISSEMENT : aucun .sig (signature Ed25519 absente).')
+
+          print(f'release {tag} : OK — {image} ({size} octets) sha={real[:16]}…')
+          PY
+
+      - name: Conclusion
+        if: ${{ always() }}
+        run: |
+          echo "Canal stable : la release sera distribuée aux robots MonOS."
+          echo "Une version non-stable est systématiquement bloquée en amont."

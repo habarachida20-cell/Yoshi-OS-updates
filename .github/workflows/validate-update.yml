@@ -1,0 +1,88 @@
+name: validate-update
+
+on:
+  pull_request:
+    paths:
+      - 'updates/**'
+      - 'tools/**'
+      - 'installer/**'
+      - 'recovery/**'
+      - 'updater/**'
+  push:
+    branches: ['**']
+    paths:
+      - 'updates/**'
+      - 'tools/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Valider le manifeste updates/version.json
+        run: |
+          python3 - <<'PY'
+          import json, re, sys
+          path = 'updates/version.json'
+          try:
+              m = json.load(open(path, encoding='utf-8'))
+          except Exception as e:
+              sys.exit(f'JSON invalide : {e}')
+
+          required = ['product','channel','version','release_tag',
+                      'minimum_version','image','sha256','size','release_notes']
+          missing = [k for k in required if k not in m]
+          if missing:
+              sys.exit(f'Champs manquants : {missing}')
+
+          if m['product'] != 'MonOS':
+              sys.exit(f"product doit être 'MonOS', reçu {m['product']!r}")
+          if m['channel'] != 'stable':
+              sys.exit(f"channel doit être 'stable', reçu {m['channel']!r}")
+          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', m['version']):
+              sys.exit(f'version doit être X.Y.Z, reçu {m["version"]!r}')
+          if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', m['release_tag']):
+              sys.exit(f'release_tag doit être vX.Y.Z, reçu {m["release_tag"]!r}')
+          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', m['minimum_version']):
+              sys.exit(f'minimum_version doit être X.Y.Z, reçu {m["minimum_version"]!r}')
+          if not re.fullmatch(r'[0-9a-fA-F]{64}', m['sha256']):
+              sys.exit('sha256 doit comporter 64 caractères hexadécimaux')
+          if not isinstance(m['size'], int) or m['size'] < 0:
+              sys.exit('size doit être un entier >= 0')
+          if not isinstance(m['release_notes'], list):
+              sys.exit('release_notes doit être une liste')
+          expected_image = f"MonOS-{m['version']}.img"
+          if m['image'] != expected_image:
+              sys.exit(f"image doit être {expected_image}, reçu {m['image']!r}")
+
+          # Cohérence version / tag (même X.Y.Z).
+          tag_ver = m['release_tag'].lstrip('v')
+          if tag_ver != m['version']:
+              sys.exit(f"incohérence tag {m['release_tag']} vs version {m['version']}")
+
+          print(f'version.json OK : {m["version"]} ({m["release_tag"]}), ' +
+                f'sha={m["sha256"][:12]}…, size={m["size"]}')
+          PY
+
+      - name: Valider les outils Python
+        run: |
+          python3 -m py_compile tools/release_prepare.py
+          python3 tools/release_prepare.py --verify-json updates/version.json
+
+      - name: Vérifier la logique stable/prerelease des workflows
+        run: |
+          python3 - <<'PY'
+          import re, sys
+          # Les mots interdits doivent être présents dans le code du robot.
+          src = open('updater/update-robot.cpp', encoding='utf-8').read()
+          src = src.lower()
+          for word in ('alpha','beta','rc','testing','unstable','development'):
+              if word not in src:
+                  sys.exit(f'mot interdit absent de update-robot.cpp : {word}')
+          print('Logique STABLE/PRERELEASE vérifiée dans update-robot.cpp')
+          PY
