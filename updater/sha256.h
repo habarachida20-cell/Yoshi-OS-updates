@@ -39,9 +39,9 @@ inline void sha256_compute(const void* data, size_t len, uint8_t out[32]) {
   for(int i = 0; i < 8; ++i)
     buf[nBlocks*64 - 1 - i] = (uint8_t)(bitLen >> (8*i));
 
-  for(size_t b = 0; b < nBlocks; ++b) {
+  for(size_t blockIdx = 0; blockIdx < nBlocks; ++blockIdx) {
     uint32_t w[64];
-    const uint8_t* p = buf + b*64;
+    const uint8_t* p = buf + blockIdx*64;
     for(int i = 0; i < 16; ++i)
       w[i] = ((uint32_t)p[i*4]<<24) | ((uint32_t)p[i*4+1]<<16) | ((uint32_t)p[i*4+2]<<8) | p[i*4+3];
     for(int i = 16; i < 64; ++i) {

@@ -26,9 +26,9 @@
 namespace monupd {
 
 // ---------------------------------------------------------------------------
-// Hote / simulation : le slot est un fichier ("" = retour simples). 
-// Noyau : TODO(noyau MonOS) — les deux fonctions ci-dessous sont remplacees
-// par la couche disque du kernel (lecture/ecriture de blocs logiques).
+// Hote / simulation : le slot est un fichier ("" = retour simples).
+// Noyau : branche sur monos_disk_write/read (kernel-bindings) — couche
+// disque du kernel, blocs logiques 512 o, jamais le slot actif.
 // ---------------------------------------------------------------------------
 #if !defined(MONOS_UPD_KERNEL)
 inline std::string slotPath(int slot) {
@@ -52,9 +52,22 @@ static int slot_read_block(const std::string& path, long long offset, void* buf,
   return (r == len) ? 0 : -2;
 }
 #else
-// TODO(noyau MonOS) : API disque du kernel :
-//   int monos_disk_write(int slot, uint32_t block, const void* data, size_t nblocks);
-//   int monos_disk_read (int slot, uint32_t block, void* data, size_t nblocks);
+// Branchement kernel : acces au slot via la couche disque (blocs 512 o).
+#include "monos_kernel_api.h"
+// resolution du slot depuis le nom de fichier simu ("monos_slot_A.img").
+static int slotFromPath(const std::string& path) {
+  return (path.empty() || path[path.size() - 5] == 'A') ? kSlotA : kSlotB;
+}
+static int slot_write_block(const std::string& path, long long offset, const void* buf, size_t len) {
+  int slot = slotFromPath(path);
+  if(len == 0 || (len % 512) != 0) return -2;
+  return monos_disk_write(slot, (unsigned int)(offset / 512), buf, (unsigned int)len);
+}
+static int slot_read_block(const std::string& path, long long offset, void* buf, size_t len) {
+  int slot = slotFromPath(path);
+  if(len == 0 || (len % 512) != 0) return -2;
+  return monos_disk_read(slot, (unsigned int)(offset / 512), buf, (unsigned int)len);
+}
 #endif
 
 // ---------------------------------------------------------------------------
@@ -143,7 +156,10 @@ int installer_run(const char* srcImage, const char* sha256Expected,
   journal_append("Install: OK");
   std::printf("Install: commit OK — prochain boot sur le slot %c (attempts=%d)\n",
               target == kSlotA ? 'A' : 'B', kMaxBootAttempts);
-  // TODO(noyau MonOS) : monos_reboot() pour lancer le nouveau slot.
+#if defined(MONOS_UPD_KERNEL)
+  // Branchement kernel : demarre la machine ; le bootloader lira nextSlot.
+  monos_reboot();
+#endif
   return 0;
 }
 

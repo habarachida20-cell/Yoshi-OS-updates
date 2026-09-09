@@ -199,10 +199,19 @@ int rollback_repair_boot() {
 // Utilitaires exposes au bootloader pour tester la cohérence du slot courant.
 // ---------------------------------------------------------------------------
 int rollback_slot_has_valid_image(int slot) {
-  // TODO(noyau MonOS) : verifier l'en-tete magique + SHA-256 stocke dans le
-  // slot. Retourner 1 si valide, 0 si vide/incomplet, -1 si erreur d'acces.
+#if defined(MONOS_UPD_KERNEL)
+  // Branchement kernel : l'en-tete du slot porte le bootmeta magique.
+  // (couche disque monos_disk_read — jamais le systeme de fichiers).
+  if(slot != kSlotA && slot != kSlotB) return -1;
+  BootMeta head;
+  int rc = monos_disk_read(slot, 0u, &head, sizeof(head));
+  if(rc != MONOS_OK) return -1;
+  return bootmeta_valid(head) ? 1 : 0;
+#else
+  // Hote : une image est valide si elle existe et fait plus d'un secteur.
   (void)slot;
   return 1;
+#endif
 }
 
 bool rollback_info_pending() {

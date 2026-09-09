@@ -85,11 +85,21 @@ inline int bootmeta_load(BootMeta& m) {
   return 0;
 }
 #else
-// TODO(noyau MonOS) : fournir l'acces au "bloc de metadonnees" de l'image
-// (couche disque du bootloader/kernel). Les deux fonctions doivent lire/ecrire
-// un secteur logique reserve (128 Ko de premier/last secteur du disque).
-int bootmeta_save(const BootMeta& m);
-int bootmeta_load(BootMeta& m);
+// Branchement kernel : le blob est lu/ecrit dans le "bloc de metadonnees"
+// par monos_kernel_impl.c (voir kernel-bindings/monos_kernel_api.h).
+#include "monos_kernel_api.h"
+inline int bootmeta_save(const BootMeta& m) {
+  if(!bootmeta_valid(m)) return -1;
+  return monos_bootmeta_save(&m, sizeof(m));
+}
+inline int bootmeta_load(BootMeta& m) {
+  int rc = monos_bootmeta_load(&m, sizeof(m));
+  if(rc != MONOS_OK || !bootmeta_valid(m)) {
+    bootmeta_init(m);
+    return -1;
+  }
+  return 0;
+}
 #endif
 
 // Journal des mises a jour. Format texte append-only (levee du spec).
@@ -103,9 +113,8 @@ inline int journal_append(const char* line) {
   std::fclose(f);
   return 0;
 #else
-  // TODO(noyau MonOS) : append-line dans le journal du systeme de fichiers.
-  (void)line;
-  return 0;
+  // Branchement kernel : journal sur secteur logique dedie.
+  return monos_journal_append(line);
 #endif
 }
 

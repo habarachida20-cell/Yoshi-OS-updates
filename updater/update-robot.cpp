@@ -12,7 +12,7 @@
 //
 // Compilation :
 //   Noyau MonOS : fonctions reseau/disque fournies par la couche kernel.
-//   Hote (tests PC, Windows) : -DMONOS_UPD_HOST -lwinhttp
+//   Hote (tests PC, Windows) : -DMONOS_UPD_HOST -lwininet
 // ===========================================================================
 
 #include <cstdio>
@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <iostream>
 
 #include "version.h"
 #include "json.h"
@@ -31,80 +32,81 @@ namespace monupd {
 
 // ---------------------------------------------------------------------------
 // 1) COUCHE RESEAU (HTTPS)
-//    Noyau : TODO(noyau MonOS) — brancher la pile reseau du kernel
-//            (esp_tls/lwip/MonOS Net). L'API ci-dessous est le point unique.
-//    Hote  : WinHTTP (Windows) activee par -DMONOS_UPD_HOST.
+//    Noyau : branche sur monos_net_https_get (kernel-bindings/). La pile du
+//            kernel (TLS + TCP/IP + pilote NIC) reste a ecrire : tant qu'elle
+//            manque, la fonction renvoie MONOS_ERR_NONET (refus propre).
+//    Hote  : WinINet (Windows) activee par -DMONOS_UPD_HOST.
 // ---------------------------------------------------------------------------
 #if defined(MONOS_UPD_HOST)
-
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <winhttp.h>
+#include <wininet.h>
+
+#ifndef MONOS_ROBOT_DEBUG
+#define ROBOTDBG(msg) ((void)0)
+#else
+#define ROBOTDBG(msg) do { DWORD _ge = GetLastError(); \
+  std::cerr << "[robot-dbg] " << msg << " GetLastError=0x" << std::hex << _ge << std::dec << "\n"; } while(0)
+#endif
 
 static int http_get(const std::string& url, long* statusOut, std::string* bodyOut,
                     const char* rangeStart = nullptr) {
-  HINTERNET s = WinHttpOpen(L"MonOS-Updater/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-                            WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-  if(!s) return -1;
+  HINTERNET s = InternetOpenA("MonOS-Updater/1.0", INTERNET_OPEN_TYPE_PRECONFIG,
+                              0, 0, 0);
+  if(!s) { ROBOTDBG("InternetOpen"); return -1; }
 
-  size_t sl = url.find("://");
-  size_t pathStart = url.find('/', sl == std::string::npos ? 0 : sl + 3);
-  std::wstring host(url.substr(sl + 3, pathStart - (sl + 3)).begin(),
-                    url.substr(sl + 3, pathStart - (sl + 3)).end());
-  std::wstring path = pathStart == std::string::npos ? L"/" :
-    std::wstring(url.substr(pathStart).begin(), url.substr(pathStart).end());
+  std::string extraHeaders;
+  if(rangeStart) extraHeaders = "Range: bytes=" + std::string(rangeStart) + "\r\n";
 
-  HINTERNET c = WinHttpConnect(s, host.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0);
-  if(!c) { WinHttpCloseHandle(s); return -2; }
+  HINTERNET f = InternetOpenUrlA(s, url.c_str(),
+                                 extraHeaders.empty() ? nullptr : extraHeaders.c_str(),
+                                 (DWORD)extraHeaders.size(),
+                                 INTERNET_FLAG_SECURE | INTERNET_FLAG_RELOAD |
+                                   INTERNET_FLAG_NO_CACHE_WRITE, 0);
+  if(!f) { ROBOTDBG("InternetOpenUrl"); InternetCloseHandle(s); return -2; }
 
-  static const wchar_t* acceptTypes[] = { L"application/json", L"application/octet-stream", L"*/*", nullptr };
-  HINTERNET r = WinHttpOpenRequest(c, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER,
-                                   acceptTypes, WINHTTP_FLAG_SECURE | WINHTTP_FLAG_REFRESH);
-  if(!r) { WinHttpCloseHandle(c); WinHttpCloseHandle(s); return -3; }
-
-  std::wstring extra;
-  if(rangeStart) extra = L"Range: bytes=" + std::wstring(rangeStart, rangeStart + strlen(rangeStart));
-  WinHttpAddRequestHeaders(r, extra.c_str(), (DWORD)-1L, WINHTTP_ADDREQ_FLAG_REPLACE);
-
-  if(!WinHttpSendRequest(r, WINHTTP_NO_EXTRA_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0)) {
-    WinHttpCloseHandle(r); WinHttpCloseHandle(c); WinHttpCloseHandle(s); return -4;
+  DWORD statusCode = 200;
+  DWORD st = 0, stL = sizeof(st), idx = 0;
+  if(HttpQueryInfoA(f, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
+                    &st, &stL, &idx)) {
+    statusCode = st;
   }
-  if(!WinHttpReceiveResponse(r, nullptr)) {
-    WinHttpCloseHandle(r); WinHttpCloseHandle(c); WinHttpCloseHandle(s); return -5;
-  }
-  DWORD st = 0; DWORD stL = sizeof(st);
-  WinHttpQueryHeaders(r, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                      WINHTTP_HEADER_NAME_BY_INDEX, &st, &stL, WINHTTP_NO_HEADER_INDEX);
-  if(statusOut) *statusOut = st;
+  if(statusOut) *statusOut = (long)statusCode;
 
-  DWORD avail = 0;
   char buf[16384];
-  while(WinHttpQueryDataAvailable(r, &avail) && avail) {
-    DWORD rd = 0;
-    if(!WinHttpReadData(r, buf, avail < sizeof(buf) ? avail : sizeof(buf), &rd)) break;
-    if(bodyOut && rd) bodyOut->append(buf, rd);
+  DWORD rd = 0;
+  while(InternetReadFile(f, buf, sizeof(buf), &rd) && rd) {
+    if(bodyOut) bodyOut->append(buf, rd);
   }
-  WinHttpCloseHandle(r); WinHttpCloseHandle(c); WinHttpCloseHandle(s);
+
+  InternetCloseHandle(f);
+  InternetCloseHandle(s);
   return 0;
 }
 
-#else // ---- MODE NOYAU (stubs a implanter dans MonOS) ----
+#else // ---- MODE NOYAU (branche l'API kernel-bindings) ----
 
-// TODO(noyau MonOS) : cette fonction doit utiliser la pile HTTPS du
-// kernel (TLS + sockets) et etre fournie par le noyau, pas par ce fichier.
-int monos_net_https_get(const char* url, long* status, unsigned char** out, size_t* outLen);
+// Branchement kernel : l'API reseau est fournie par monos_kernel_impl.c
+// (kernel-bindings/monos_kernel_api.h). Tant que la pile HTTPS du noyau
+// n'existe pas, monos_net_https_get retourne MONOS_ERR_NONET : la mise a
+// jour est REFUSEE proprement (protege le slot actif).
+#include "monos_kernel_api.h"
 
 static int http_get(const std::string& url, long* statusOut, std::string* bodyOut,
                     const char* rangeStart = nullptr) {
-  // Fonctionnement cote noyau : branche sur le reseau MonOS.
-  // Range/reprise : gerer par blocs et ecrire "a la suite" dans le slot.
-  (void)url; (void)rangeStart;
-  if(statusOut) *statusOut = 0;
-  if(bodyOut) bodyOut->clear();
-  if(statusOut) *statusOut = 404; // TODO(kernel): resultat reel
-  return -6;                       // non implante hors noyau
+  (void)rangeStart;   // reprise par blocs geree cote disque/downloadToFile
+  unsigned char* buf = nullptr;
+  size_t len = 0u;
+  long st = 404L;
+  int rc = monos_net_https_get(url.c_str(), &st, &buf, &len);
+  if(bodyOut) {
+    if(rc != MONOS_OK || !buf) bodyOut->clear();
+    else bodyOut->assign(reinterpret_cast<char*>(buf), len);
+  }
+  if(statusOut) *statusOut = st;
+  return rc;
 }
 
 #endif // MONOS_UPD_HOST
@@ -283,13 +285,35 @@ static int downloadToFile(const std::string& url, const std::string& dest,
   return 0;
 }
 #else
-// TODO(noyau MonOS) : telecharger par blocs directement dans le slot inactif
-// (image-ecran + ECC). La reprise se fait via le deplacement d'ecriture sur
-// le slot et la re-verification finale par SHA-256.
+// Branchement kernel : telecharge par blocs directement dans le slot inactif.
+// 1) GET HTTPS (monos_net_https_get, image-ecran complete tant que la pile
+//    n'a pas de transfert streaming),
+// 2) ecriture disque du slot inactif via monos_disk_write,
+// 3) la verification finale (relecture + SHA-256) a lieu dans installToSlot.
 static int downloadToFile(const std::string& url, const std::string& dest,
                           long long expectSize) {
-  (void)url; (void)dest; (void)expectSize;
-  return -6;
+  (void)dest;
+  BootMeta meta;
+  if(bootmeta_load(meta) != 0 || !bootmeta_valid(meta)) return -10;
+  int target = (meta.activeSlot == kSlotA) ? kSlotB : kSlotA;
+
+  unsigned char* img = nullptr;
+  size_t len = 0u;
+  long st = 0L;
+  if(monos_net_https_get(url.c_str(), &st, &img, &len) != MONOS_OK ||
+     st != 200L || !img || len != (size_t)expectSize) {
+    return -2;
+  }
+
+  // Copie par blocs alignes 512 o dans le slot inactif.
+  size_t off = 0u;
+  while(off + 512u <= len) {
+    int rc = monos_disk_write(target, (unsigned int)(off / 512u),
+                              img + off, 512u);
+    if(rc != MONOS_OK) return -3;
+    off += 512u;
+  }
+  return 0;
 }
 #endif
 
@@ -373,8 +397,30 @@ static int installToSlot(const Manifest& m) {
 
   std::printf("Install: OK (slot %c)\n", target == kSlotA ? 'A' : 'B');
 
-  // TODO(noyau MonOS) : ecrire l'image dans le slot inactif via la couche
-  // disque (128 Ko par bloc), puis relire et comparer avec le SHA-256.
+#if defined(MONOS_UPD_KERNEL)
+  // Branchement kernel : relecture du slot inactif + SHA-256 (monos_disk_read)
+  // avant de marquer le slot de demarrage suivant.
+  {
+    std::vector<uint8_t> img((size_t)m.size);
+    const unsigned int nblk = (unsigned int)((m.size + 511) / 512);
+    for(unsigned int b = 0; b < nblk; ++b) {
+      if(monos_disk_read(target, b, &img[(size_t)b * 512u], 512u) != MONOS_OK) {
+        std::printf("Install: relecture slot impossible\n");
+        journal_append("Install: KO");
+        return -1;
+      }
+    }
+    uint8_t digest[32]; char hex[65];
+    sha256_compute(img.data(), img.size(), digest);
+    sha256_hex(digest, hex);
+    if(std::strcmp(hex, m.sha256.c_str()) != 0) {
+      std::printf("Install: SHA-256 du slot != manifeste — slot laisse incomplete\n");
+      journal_append("Install: KO");
+      return -1;
+    }
+    journal_append("Install: SHA256 slot OK");
+  }
+#endif
 
   meta.nextSlot = target;
   meta.bootAttempts = kMaxBootAttempts;       // compteur anti-boucle
@@ -385,6 +431,11 @@ static int installToSlot(const Manifest& m) {
   if(bootmeta_save(meta) != 0) return -11;
   std::printf("Slot suivant marque (attempts=%d, serial=%u)\n",
               (int)meta.bootAttempts, meta.bootSerial);
+#if defined(MONOS_UPD_KERNEL)
+  // Branchement kernel : le bootloader lira nextSlot/bootAttempts au prochain
+  // boot et validera ou rollbackera automatiquement.
+  monos_reboot();
+#endif
   return 0;
 }
 
@@ -495,9 +546,9 @@ static int cmdInstall(bool simulate) {
     journal_append("Install: OK");
 
     if(!simulate) {
-      // 5) Marquer le slot de demarrage suivant + redemarrer.
-      //    TODO(noyau MonOS) : monos_reboot() — le bootloader lira nextSlot,
-      //    bootAttempts et validera ou rollbackera automatiquement.
+      // 5) Redemarrage : monos_reboot() a deja ete appele par installToSlot
+      //    (branchement kernel). Le bootloader lira nextSlot/bootAttempts et
+      //    validera ou rollbackera automatiquement.
       std::printf("Prochain demarrage sur le slot inactif. Redemarrage MonOS...\n");
       journal_append("Boot: PENDING");
     } else {

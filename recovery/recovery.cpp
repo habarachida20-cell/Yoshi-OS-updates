@@ -15,6 +15,9 @@
 
 #include "../installer/bootmeta.h"
 #include "../updater/version.h"
+#if defined(MONOS_UPD_KERNEL)
+#include "monos_kernel_api.h"
+#endif
 
 // Prototypes des fonctions de rollback.cpp (l'arborescence specifique ne
 // prevoit pas de .h dans installer/ ; ce point sera centralise dans le noyau).
@@ -72,7 +75,12 @@ int recovery_reinstall_update()            { return rollback_repair_boot(); }
 int recovery_check_updates()               { return 0; } // TODO : appel robot "check"
 int recovery_repair_boot()                 { return rollback_repair_boot(); }
 int recovery_cancel_last_update()          { return rollback_cancel_last_update(); }
-int recovery_reboot()                      { /* TODO(kernel): monos_reboot(); */ return 0; }
+int recovery_reboot() {
+#if defined(MONOS_UPD_KERNEL)
+  monos_reboot();
+#endif
+  return 0;
+}
 int recovery_contact_support()             { std::printf("https://github.com/%s/%s/issues\n", kRepoOwner, kRepoName); return 0; }
 
 } // namespace monupd

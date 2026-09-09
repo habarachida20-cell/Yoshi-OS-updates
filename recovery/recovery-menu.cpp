@@ -32,12 +32,13 @@ int recovery_check_updates();
 int recovery_reboot();
 int recovery_contact_support();
 
-// Lecture clavier : TODO(noyau MonOS) branchons la console du kernel.
+// Lecture clavier : kernel => monos_getch() (console serie non bloquante).
 #if defined(MONOS_UPD_HOST)
 static int readKey() { return std::getchar(); }
 #else
-static int readKey() { // TODO(kernel): monos_getch()
-  return -1;
+#include "monos_kernel_api.h"
+static int readKey() {
+  return monos_getch();
 }
 #endif
 
