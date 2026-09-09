@@ -53,8 +53,9 @@ def semver_gt(a: tuple, b: tuple) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Préparateur de release MonOS")
-    ap.add_argument("image", help="chemin de l'image (ex: MonOS-1.4.0.img)")
-    ap.add_argument("--version", required=True, help="version X.Y.Z (stable uniquement)")
+    ap.add_argument("image", nargs="?", default=None,
+                    help="chemin de l'image (ex: MonOS-1.4.0.img)")
+    ap.add_argument("--version", default=None, help="version X.Y.Z (stable uniquement)")
     ap.add_argument("--tag", default=None, help="tag GitHub (défaut: v<version>)")
     ap.add_argument("--minimum-version", default=None,
                     help="version minimale pour une MAJ directe (défaut: version)")
@@ -84,8 +85,11 @@ def main() -> int:
             sys.exit(f"product doit être {PRODUCT}")
         if m["channel"] != "stable":
             sys.exit("channel doit être 'stable'")
-        print(f"version.json vérifié : {m['version']} ({m['released']})")
+        print(f"version.json vérifié : {m['version']} ({m['release_tag']})")
         return 0
+
+    if not args.image or not args.version:
+        ap.error("image et --version sont requis (ou utiliser --verify-json)")
 
     # ----- préparation réelle ------------------------------------------------
     vparts = parse_version(args.version)

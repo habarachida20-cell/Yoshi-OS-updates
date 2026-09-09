@@ -5,7 +5,11 @@
   "release_tag": "v1.0.0",
   "minimum_version": "1.0.0",
   "image": "MonOS-1.0.0.img",
-  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "size": 0,
-  "release_notes": []
+  "sha256": "df93b82eb6018631680e862bc4c600964d1e0300999694ba029a0cded036e733",
+  "size": 5120000,
+  "release_notes": [
+    "MonOS 1.0.0 - premiere version stable",
+    "Boot init -> shell fonctionnel",
+    "Robots de mise a jour actifs"
+  ]
 }
