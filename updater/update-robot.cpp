@@ -261,10 +261,17 @@ static int downloadToFile(const std::string& url, const std::string& dest,
   long have = 0;
   if(f) { std::fseek(f, 0, SEEK_END); have = std::ftell(f); std::fclose(f); }
 
+  // Fichier deja complet : rien a telecharger.
+  if(have >= expectSize) {
+    std::printf("Download: deja present (%ld octets)\n", have);
+    return 0;
+  }
+
   char range[48] = {0};
   if(have > 0) std::snprintf(range, sizeof(range), "%ld-", have);
 
-  if(http_get(url, &st, &body, have > 0 ? range : nullptr) != 0 || st != 200) {
+  if(http_get(url, &st, &body, have > 0 ? range : nullptr) != 0 ||
+     (st != 200 && st != 206)) {
     std::printf("Download: KO (HTTP %ld)\n", st);
     return -1;
   }
