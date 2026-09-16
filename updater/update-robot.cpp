@@ -1,37 +1,48 @@
-// Yoshi OS Update Robot — projet abandonné / version non terminée.
-// Le serveur est consulté uniquement pour vérifier l'état du projet.
-// Si le serveur confirme l'état "abandoned" ou "updates_enabled=false",
-// aucune connexion de téléchargement, aucune recherche de release et aucune
-// installation ne doit être effectuée.
+// Yoshi OS Update Robot — projet abandonne / version non terminee.
+// Le manifeste GitHub est la verite distante ; le verrou local est la derniere
+// barriere avant tout telechargement ou toute installation.
 
 #include <cstdio>
+#include <string>
+#include "emergency-lock.h"
 
 namespace monupd {
 
-static const char* kAbandonedMessage =
-  "Yoshi OS — Projet abandonné. Version non terminée. Aucune mise à jour n'est disponible.";
+static const char* kAbandonedMessage = yoshiEmergencyMessage();
 
-// État définitif : les mises à jour sont désactivées.
 static bool updatesEnabledFromServer(bool serverFound, bool updatesEnabled,
-                                     const char* status) {
-  if(!serverFound) return false;
-  if(!updatesEnabled) return false;
-  if(status && status[0] != 0 && std::string(status) == "abandoned") return false;
+                                     const char* status, bool installEnabled) {
+  if(!serverFound) return false;                 // fail-closed
+  if(!updatesEnabled || !installEnabled) return false;
+  if(status && status[0] != '\0' && std::string(status) == "abandoned") return false;
   return true;
 }
 
-// Point d'entrée de contrôle : le client ne doit jamais installer une release
-// lorsque le serveur indique que Yoshi OS est abandonné/non terminé.
 int checkAndRunUpdater(bool serverFound, bool updatesEnabled,
-                       const char* status) {
-  if(!updatesEnabledFromServer(serverFound, updatesEnabled, status)) {
+                       const char* status, bool installEnabled) {
+  // Le projet est abandonne : aucun chemin de telechargement/installation.
+  if(yoshiEmergencyLockActive() ||
+     !updatesEnabledFromServer(serverFound, updatesEnabled, status, installEnabled)) {
     std::printf("%s\n", kAbandonedMessage);
     return 0;
   }
 
-  // Aucun chemin d'installation n'est disponible dans la version abandonnée.
+  // Aucun chemin d'installation n'est disponible dans cette version.
   std::printf("%s\n", kAbandonedMessage);
   return 0;
 }
 
+int updateRobotMain(int argc, char** argv) {
+  (void)argc;
+  (void)argv;
+  // Etat connu du manifeste actuel : abandonne, mises a jour et installation desactivees.
+  return checkAndRunUpdater(true, false, "abandoned", false);
+}
+
 } // namespace monupd
+
+#ifndef MONOS_UPD_ROBOT_LINK
+int main(int argc, char** argv) {
+  return monupd::updateRobotMain(argc, argv);
+}
+#endif
