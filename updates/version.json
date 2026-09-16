@@ -7,9 +7,12 @@
   "image": "MonOS-1.0.1.img",
   "sha256": "7b90df61f61f6e22457257b1e31a7c3606b74c934b5b640e8dd4ab040c322a63",
   "size": 5120000,
+  "status": "abandoned",
+  "updates_enabled": false,
+  "status_message": "Yoshi OS — Projet abandonné. Version non terminée. Aucune mise à jour n'est disponible.",
   "release_notes": [
-    "kernel nettoyé",
-    "build mono-disque",
-    "prêt test download SHA-256"
+    "Projet abandonné",
+    "Version non terminée",
+    "Aucune nouvelle mise à jour ne sera publiée"
   ]
 }
