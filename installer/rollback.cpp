@@ -1,18 +1,6 @@
 // ===========================================================================
 // MonOS Rollback — protection contre les mises a jour qui ne demarrent pas.
-//
-// Le bootloader appelle rollback_on_boot() tres tot, avant de lancer le
-// systeme du slot "pending".
-//
-//   - si aucun pendage : rien a faire ;
-//   - si le systeme tourne mal (pas de confirmation, echecs repetes),
-//     bootAttempts descend jusqu'a 0 puis on roule en arriere vers la
-//     derniere version stable et on exige Recovery ;
-//   - le systeme confirme sa stabilite via rollback_confirm_slot() une fois
-//     demarre correctement (appele par le robot/OS apres son init).
-//
-// Toutes les decisions s'appuient sur le blob de metadonnees (bootmeta.h),
-// jamais sur des heuristiques de fichiers.
+// Yoshi OS abandonne : aucune mise a jour pending ne peut etre validee.
 // ===========================================================================
 
 #include <cstdio>
@@ -23,22 +11,23 @@
 
 #include "bootmeta.h"
 #include "../updater/version.h"
+#include "../updater/emergency-lock.h"
 
 namespace monupd {
 
 enum class BootOutcome {
-  kNoPending,        // rien en attente : demarrer le slot actif
-  kBootPending,      // slot pending + compteur restant : demarrerne le slot
-  kRollbackNeeded,   // echecs epuises : revenir a la derniere stable
-  kRecoveryRequired  // echec catastrophique : Recovery obligatoire
+  kNoPending,
+  kBootPending,
+  kRollbackNeeded,
+  kRecoveryRequired
 };
 
 static const char* outcomeName(BootOutcome o) {
   switch(o){
-    case BootOutcome::kNoPending:       return "NO_PENDING";
-    case BootOutcome::kBootPending:     return "BOOT_PENDING";
-    case BootOutcome::kRollbackNeeded:  return "ROLLBACK_NEEDED";
-    case BootOutcome::kRecoveryRequired:return "RECOVERY_REQUIRED";
+    case BootOutcome::kNoPending: return "NO_PENDING";
+    case BootOutcome::kBootPending: return "BOOT_PENDING";
+    case BootOutcome::kRollbackNeeded: return "ROLLBACK_NEEDED";
+    case BootOutcome::kRecoveryRequired: return "RECOVERY_REQUIRED";
   }
   return "?";
 }
@@ -50,10 +39,6 @@ static int save(BootMeta& m) {
   return bootmeta_save(m);
 }
 
-// ---------------------------------------------------------------------------
-// Appele au tout debut du boot (par le bootloader ou main) : decide quel
-// slot demarrer et s'il faut rollbacker.
-// ---------------------------------------------------------------------------
 BootOutcome rollback_on_boot(BootMeta& meta) {
   if(bootmeta_load(meta) != 0) {
     bootmeta_init(meta);
@@ -61,63 +46,62 @@ BootOutcome rollback_on_boot(BootMeta& meta) {
     return BootOutcome::kNoPending;
   }
 
-  // Il n'y a pas d'echec de mise a jour si on a deja valide le slot.
+  // Verrou d'urgence : aucune version pending ne peut demarrer.
+  // Le slot actif (derniere version stable) reste la cible du boot.
+  if(yoshiEmergencyLockActive()) {
+    meta.nextSlot = kSlotNone;
+    meta.bootAttempts = 0;
+    meta.pendingVersion[0] = 0;
+    meta.recoveryRequired = 0;
+    save(meta);
+    journal_append("EMERGENCY LOCK: pending update cancelled; stable slot retained");
+    return BootOutcome::kNoPending;
+  }
+
   if(meta.nextSlot == kSlotNone || meta.nextSlot == meta.activeSlot) {
     meta.pendingVersion[0] = 0;
     if(meta.recoveryRequired) return BootOutcome::kRecoveryRequired;
     return BootOutcome::kNoPending;
   }
 
-  // Une mise a jour est en attente de validation sur meta.nextSlot.
   if(meta.bootAttempts > 0) {
-    // Ce boot tente le slot pending. On n'attribue pas l'echec tout de suite :
-    // c'est le robot, une fois le systeme OPERE, qui appellera
-    // rollback_confirm_slot(). S'il ne le fait pas avant les prochains boots,
-    // le compteur tombe a 0 et on rollbacke.
     --meta.bootAttempts;
     save(meta);
     return BootOutcome::kBootPending;
   }
 
-  // attempts epuise : on abandonne le nouveau slot.
-  journal_append((std::string("ROLLBACK: abandon de ")
-                  + meta.pendingVersion).c_str());
-
-  // Basculer le slot actif sur l'ancien systeme stable.
+  journal_append((std::string("ROLLBACK: abandon de ") + meta.pendingVersion).c_str());
   int previous = meta.activeSlot;
-  if(meta.nextSlot == previous) { // cas incoherent : on force Recovery
+  if(meta.nextSlot == previous) {
     meta.recoveryRequired = 1;
     save(meta);
     return BootOutcome::kRecoveryRequired;
   }
-  meta.activeSlot    = previous;          // l'ancien systeme RESTE en place
-  meta.nextSlot      = kSlotNone;
+  meta.activeSlot = previous;
+  meta.nextSlot = kSlotNone;
   meta.pendingVersion[0] = 0;
-  meta.bootAttempts  = 0;
-  meta.recoveryRequired = 1;              // Recovery informe de l'echec
+  meta.bootAttempts = 0;
+  meta.recoveryRequired = 1;
   save(meta);
   journal_append("ROLLBACK: dernier systeme stable restaure");
   return BootOutcome::kRollbackNeeded;
 }
 
-// ---------------------------------------------------------------------------
-// Confirme que le slot courant est fonctionnel : valide la mise a jour.
-// Appele par l'OS apres un demarrage complet et par le robot apres un "check".
-// ---------------------------------------------------------------------------
 int rollback_confirm_slot() {
+  // Une version ne peut plus etre confirmee comme stable apres abandon.
+  if(yoshiEmergencyLockActive()) {
+    journal_append("EMERGENCY LOCK: confirmation of update refused");
+    return 125;
+  }
   BootMeta meta;
   if(bootmeta_load(meta) != 0 || !bootmeta_valid(meta)) return -1;
   if(meta.nextSlot != kSlotNone && meta.nextSlot != meta.activeSlot) {
-    // La mise a jour demarre : on la valide, l'ancien systeme reste une
-    // sauvegarde temporaire (previousVersion).
     meta.activeSlot = meta.nextSlot;
-    meta.nextSlot   = kSlotNone;
+    meta.nextSlot = kSlotNone;
     meta.bootAttempts = 0;
     meta.recoveryRequired = 0;
-    std::snprintf(meta.previousVersion, sizeof(meta.previousVersion), "%s",
-                  meta.currentVersion);
-    std::snprintf(meta.currentVersion, sizeof(meta.currentVersion), "%s",
-                  meta.pendingVersion);
+    std::snprintf(meta.previousVersion, sizeof(meta.previousVersion), "%s", meta.currentVersion);
+    std::snprintf(meta.currentVersion, sizeof(meta.currentVersion), "%s", meta.pendingVersion);
     meta.pendingVersion[0] = 0;
     bootmeta_save(meta);
     journal_append("Rollback: nouvelle version confirmee comme stable");
@@ -125,44 +109,19 @@ int rollback_confirm_slot() {
   return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Fin de mise a jour : remet tout l'etat de demarrage a jour.
-// ---------------------------------------------------------------------------
-static int commit_pending(const BootMeta& pending) {
-  BootMeta meta;
-  if(bootmeta_load(meta) != 0 || !bootmeta_valid(meta)) return -1;
-  meta.nextSlot         = pending.nextSlot;
-  meta.bootAttempts     = pending.bootAttempts;
-  meta.bootSerial       = pending.bootSerial;
-  meta.updateId         = pending.updateId;
-  std::snprintf(meta.pendingVersion, sizeof(meta.pendingVersion), "%s",
-                pending.pendingVersion);
-  return bootmeta_save(meta);
-}
-
-// ---------------------------------------------------------------------------
-// Restaure la derniere version stable (menue Recovery #1).
-// ---------------------------------------------------------------------------
 int rollback_restore_last_stable() {
   BootMeta meta;
   if(bootmeta_load(meta) != 0 || !bootmeta_valid(meta)) return -1;
-  if(meta.nextSlot == kSlotNone) {
-    std::printf("Aucune mise a jour en attente : rien a restaurer.\n");
-    return 0;
-  }
   meta.nextSlot = kSlotNone;
   meta.bootAttempts = 0;
   meta.recoveryRequired = 0;
   meta.pendingVersion[0] = 0;
-  int rc = bootmeta_save(meta);   // demarre l'ancien slot au prochain boot
+  int rc = bootmeta_save(meta);
   journal_append("Recovery: restauration de la derniere version stable");
   std::printf("Recovery: prochain demarrage sur la derniere version stable.\n");
   return rc;
 }
 
-// ---------------------------------------------------------------------------
-// Annule la derniere mise a jour (menue Recovery #5).
-// ---------------------------------------------------------------------------
 int rollback_cancel_last_update() {
   BootMeta meta;
   if(bootmeta_load(meta) != 0 || !bootmeta_valid(meta)) return -1;
@@ -176,10 +135,6 @@ int rollback_cancel_last_update() {
   return rc;
 }
 
-// ---------------------------------------------------------------------------
-// Repare le demarrage (menue Recovery #4) : purge le slot pending incomplet
-// et force le slot stable.
-// ---------------------------------------------------------------------------
 int rollback_repair_boot() {
   BootMeta meta;
   if(bootmeta_load(meta) != 0 || !bootmeta_valid(meta)) return -1;
@@ -195,20 +150,14 @@ int rollback_repair_boot() {
   return rc;
 }
 
-// ---------------------------------------------------------------------------
-// Utilitaires exposes au bootloader pour tester la cohérence du slot courant.
-// ---------------------------------------------------------------------------
 int rollback_slot_has_valid_image(int slot) {
 #if defined(MONOS_UPD_KERNEL)
-  // Branchement kernel : l'en-tete du slot porte le bootmeta magique.
-  // (couche disque monos_disk_read — jamais le systeme de fichiers).
   if(slot != kSlotA && slot != kSlotB) return -1;
   BootMeta head;
   int rc = monos_disk_read(slot, 0u, &head, sizeof(head));
   if(rc != MONOS_OK) return -1;
   return bootmeta_valid(head) ? 1 : 0;
 #else
-  // Hote : une image est valide si elle existe et fait plus d'un secteur.
   (void)slot;
   return 1;
 #endif
