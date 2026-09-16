@@ -1,5 +1,5 @@
 {
-  "product": "MonOS",
+  "product": "Yoshi OS",
   "channel": "stable",
   "version": "1.0.1",
   "release_tag": "v1.0.1",
@@ -9,6 +9,7 @@
   "size": 5120000,
   "status": "abandoned",
   "updates_enabled": false,
+  "install_enabled": false,
   "status_message": "Yoshi OS — Projet abandonné. Version non terminée. Aucune mise à jour n'est disponible.",
   "release_notes": [
     "Projet abandonné",
