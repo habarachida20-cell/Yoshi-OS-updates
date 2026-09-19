@@ -8,12 +8,14 @@
   "sha256": "7b90df61f61f6e22457257b1e31a7c3606b74c934b5b640e8dd4ab040c322a63",
   "size": 5120000,
   "status": "abandoned",
+  "service_enabled": false,
+  "communications_enabled": false,
   "updates_enabled": false,
   "install_enabled": false,
-  "status_message": "Yoshi OS — Projet abandonné. Version non terminée. Aucune mise à jour n'est disponible.",
+  "status_message": "Yoshi OS — Service de mise à jour arrêté. Les communications et les mises à jour sont désactivées.",
   "release_notes": [
-    "Projet abandonné",
-    "Version non terminée",
+    "Service de mise à jour arrêté",
+    "Communications désactivées",
     "Aucune nouvelle mise à jour ne sera publiée"
   ]
 }
