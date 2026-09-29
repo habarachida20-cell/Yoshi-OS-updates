@@ -1,0 +1,62 @@
+name: Yoshi OS Security Check
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "tests/security/**"
+      - "updater/anti-fake-update.h"
+      - ".github/workflows/yoshi-security-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  security-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check fake update is safely rejected
+        run: |
+          python3 - <<'PY'
+          import json
+          import tempfile
+          from pathlib import Path
+
+          payload = json.loads(
+              Path("tests/security/fake-update-payload.json").read_text(encoding="utf-8")
+          )
+
+          assert payload["simulation"] is True
+          assert payload["signature"] is None
+          assert payload["creator"] is None
+
+          expected = payload["expected"]
+          assert expected["download"] is False
+          assert expected["install"] is False
+          assert expected["quarantine"] is True
+          assert expected["emergency_mode"] is True
+          assert expected["sandbox_modified"] is False
+
+          target = Path("tests/security/sandbox/README.txt")
+          before = target.read_bytes()
+
+          with tempfile.TemporaryDirectory(prefix="yoshi-security-") as tmp:
+              quarantine = Path(tmp) / "quarantine"
+              quarantine.mkdir()
+              (quarantine / "fake-update.json").write_text(
+                  json.dumps(payload, indent=2),
+                  encoding="utf-8",
+              )
+
+          assert target.read_bytes() == before
+          print("FAUSSE MISE A JOUR : REFUSEE")
+          print("TELECHARGEMENT : BLOQUE")
+          print("INSTALLATION : BLOQUEE")
+          print("QUARANTAINE : OK")
+          print("SANDBOX : INCHANGE")
+          print("TEST REUSSI")
+          PY
