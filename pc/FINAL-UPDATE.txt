@@ -1,0 +1,15 @@
+YOSHI OS — MISE À JOUR FINALE POUR PC
+
+STATUT : ABANDONNÉ
+ÉTAT : NON TERMINÉ
+VERSION CONSERVÉE : 1.0.1
+
+Cette mise à jour est une mise à jour finale de statut.
+
+Aucune nouvelle version ne sera installée.
+Les mises à jour automatiques sont désactivées.
+L'installation est désactivée.
+Le dépôt est conservé uniquement comme archive.
+
+Message affiché par le système :
+Yoshi OS — Projet définitivement abandonné et non terminé. Aucune nouvelle mise à jour n'est disponible.
