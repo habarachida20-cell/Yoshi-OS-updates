@@ -1,0 +1,18 @@
+Yoshi OS — test anti-fausse mise à jour
+
+SCÉNARIO :
+- signature présente : NON
+- signature valide : NON
+- créateur reconnu : NON
+
+RÉSULTAT ATTENDU :
+- mise à jour refusée
+- téléchargement refusé
+- installation refusée
+- fichier placé en quarantaine
+- mode urgence activé
+- message : "URGENT : mise à jour non signée. Fichier placé en quarantaine."
+
+IMPORTANT :
+La quarantaine remplace la suppression immédiate : le fichier suspect est isolé afin d'éviter
+une suppression irréversible pendant le test. Aucun fichier système n'est supprimé par ce scénario.
