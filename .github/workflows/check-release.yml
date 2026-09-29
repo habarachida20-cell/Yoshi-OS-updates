@@ -65,7 +65,7 @@ jobs:
           assets = [l.strip() for l in open('_assets.txt') if l.strip()]
 
           # 1) image attendue présente et de taille > 0
-          image = f'MonOS-{version}.img'
+          image = f'Yoshi OS-{version}.img'
           if image not in assets:
               sys.exit(f"asset image manquant : {image} (assets={assets})")
           imgs = glob.glob('_rel/*.img')
@@ -79,8 +79,8 @@ jobs:
           if 'version.json' not in assets:
               sys.exit('asset version.json manquant')
           m = json.load(open('_rel/version.json', encoding='utf-8'))
-          if m['product'] != 'MonOS':
-              sys.exit('product != MonOS')
+          if m['product'] != 'Yoshi OS':
+              sys.exit('product != Yoshi OS')
           if m['channel'] != 'stable':
               sys.exit('channel != stable')
           if m['version'] != version:
@@ -119,5 +119,5 @@ jobs:
       - name: Conclusion
         if: ${{ always() }}
         run: |
-          echo "Canal stable : la release sera distribuée aux robots MonOS."
+          echo "Canal stable : la release sera distribuée aux robots Yoshi OS."
           echo "Une version non-stable est systématiquement bloquée en amont."
