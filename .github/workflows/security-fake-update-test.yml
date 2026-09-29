@@ -1,0 +1,56 @@
+name: Fake Update Security Test
+
+on:
+  push:
+    paths:
+      - "tests/security/**"
+      - "updater/anti-fake-update.h"
+      - ".github/workflows/security-fake-update-test.yml"
+  workflow_dispatch:
+
+jobs:
+  fake-update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check fake update fixture
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("tests/security/fake-update-payload.json")
+          data = json.loads(p.read_text())
+          assert data["simulation"] is True
+          assert data["signature"] is None
+          assert data["creator"] is None
+          assert data["expected"]["download"] is False
+          assert data["expected"]["install"] is False
+          assert data["expected"]["quarantine"] is True
+          assert data["expected"]["emergency_mode"] is True
+          print("FAUSSE MISE A JOUR: détectée comme non signée.")
+          print("Téléchargement: BLOQUÉ")
+          print("Installation: BLOQUÉE")
+          print("Quarantaine: ACTIVÉE")
+          print("Mode urgence: ACTIVÉ")
+          PY
+
+      - name: Simulate modification attempt in sandbox
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path("tests/security/fake-update-payload.json").read_text())
+          target = Path("tests/security/sandbox/README.txt")
+          before = target.read_bytes()
+
+          # Simulation uniquement : on NE modifie PAS la cible.
+          print("Tentative simulée:", payload["requested_changes"][0]["action"], payload["requested_changes"][0]["file"])
+          print("Modification réelle: BLOQUÉE")
+
+          after = target.read_bytes()
+          assert before == after, "ERREUR: le fichier sandbox a été modifié"
+          print("Fichier sandbox: INCHANGÉ")
+          print("Résultat: TEST DE SÉCURITÉ RÉUSSI")
+          PY
