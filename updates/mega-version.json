@@ -1,0 +1,26 @@
+{
+  "product": "Yoshi OS",
+  "version": "2.0.0",
+  "name": "Yoshi OS Mega",
+  "status": "mega",
+  "project_state": "assembled-source",
+  "legacy_version": {
+    "version": "1.0.1",
+    "badge": "abandoned",
+    "state": "unfinished"
+  },
+  "updates_enabled": false,
+  "install_enabled": false,
+  "binary_ready": false,
+  "message": "Yoshi OS Mega 2.0.0 — source assemblée. L'ancienne version 1.0.1 est conservée avec le badge ABANDONNÉE.",
+  "source_components": [
+    "installer",
+    "kernel-bindings",
+    "recovery",
+    "updater",
+    "updates",
+    "tools",
+    "docs",
+    ".github"
+  ]
+}
