@@ -1,0 +1,54 @@
+name: Yoshi OS Fake Update Security v2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "tests/security/fake-update-payload.json"
+      - "tests/security/sandbox/README.txt"
+      - ".github/workflows/security-fake-update-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test fake update in temporary quarantine
+        run: |
+          python3 - <<'PY'
+          import json
+          import tempfile
+          from pathlib import Path
+
+          payload = json.loads(Path("tests/security/fake-update-payload.json").read_text(encoding="utf-8"))
+          assert payload["simulation"] is True
+          assert payload["signature"] is None
+          assert payload["creator"] is None
+          assert payload["expected"]["download"] is False
+          assert payload["expected"]["install"] is False
+          assert payload["expected"]["quarantine"] is True
+          assert payload["expected"]["emergency_mode"] is True
+          assert payload["expected"]["sandbox_modified"] is False
+
+          target = Path("tests/security/sandbox/README.txt")
+          before = target.read_bytes()
+
+          with tempfile.TemporaryDirectory(prefix="yoshi-quarantine-") as tmp:
+              quarantine = Path(tmp) / "quarantine"
+              quarantine.mkdir()
+              (quarantine / "fake-update.json").write_text(
+                  json.dumps(payload, indent=2), encoding="utf-8"
+              )
+              print("Fausse mise à jour : REFUSÉE")
+              print("Quarantaine temporaire : OK")
+              print("Installation réelle : BLOQUÉE")
+
+          assert target.read_bytes() == before
+          print("Sandbox : INCHANGÉE")
+          print("TEST RÉUSSI")
+          PY
