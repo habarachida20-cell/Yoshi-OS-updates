@@ -1,0 +1,21 @@
+{
+  "product": "Yoshi OS",
+  "archive_status": "abandoned",
+  "project_state": "unfinished",
+  "all_versions_abandoned": true,
+  "updates_enabled": false,
+  "install_enabled": false,
+  "versions": [
+    {
+      "version": "1.0.0",
+      "status": "abandoned",
+      "state": "unfinished"
+    },
+    {
+      "version": "1.0.1",
+      "status": "abandoned",
+      "state": "unfinished",
+      "final": true
+    }
+  ]
+}
