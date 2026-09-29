@@ -1,0 +1,19 @@
+name: Security fake update test
+
+on:
+  push:
+    paths:
+      - 'updater/**'
+      - 'tests/security/**'
+      - '.github/workflows/security-fake-update.yml'
+  workflow_dispatch:
+
+jobs:
+  fake-update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compiler le test de fausse mise à jour
+        run: g++ -std=c++17 tests/security/fake-update-test.cpp -o fake-update-test
+      - name: Simuler une mise à jour hostile sans téléchargement
+        run: ./fake-update-test
