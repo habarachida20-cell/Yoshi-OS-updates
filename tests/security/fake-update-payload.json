@@ -1,0 +1,16 @@
+{
+  "simulation": true,
+  "version": "99.99.99-FAKE",
+  "signature": null,
+  "creator": null,
+  "requested_changes": [
+    {"file":"tests/security/sandbox/README.txt","action":"modify","content":"FAKE UPDATE ATTEMPT"}
+  ],
+  "expected": {
+    "download": false,
+    "install": false,
+    "quarantine": true,
+    "emergency_mode": true,
+    "sandbox_modified": false
+  }
+}
