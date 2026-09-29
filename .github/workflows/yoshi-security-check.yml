@@ -3,10 +3,6 @@ name: Yoshi OS Security Check
 on:
   workflow_dispatch:
   push:
-    paths:
-      - "tests/security/**"
-      - "updater/anti-fake-update.h"
-      - ".github/workflows/yoshi-security-check.yml"
 
 permissions:
   contents: read
