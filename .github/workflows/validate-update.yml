@@ -45,11 +45,11 @@ jobs:
               sys.exit(f"product doit être 'Yoshi OS', reçu {m['product']!r}")
           if m['channel'] != 'stable':
               sys.exit(f"channel doit être 'stable', reçu {m['channel']!r}")
-          if not re.fullmatch(r'[0-9]+\\.[0-9]+\\.[0-9]+', m['version']):
+          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', m['version']):
               sys.exit(f'version doit être X.Y.Z, reçu {m["version"]!r}')
-          if not re.fullmatch(r'v[0-9]+\\.[0-9]+\\.[0-9]+', m['release_tag']):
+          if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', m['release_tag']):
               sys.exit(f'release_tag doit être vX.Y.Z, reçu {m["release_tag"]!r}')
-          if not re.fullmatch(r'[0-9]+\\.[0-9]+\\.[0-9]+', m['minimum_version']):
+          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', m['minimum_version']):
               sys.exit(f'minimum_version doit être X.Y.Z, reçu {m["minimum_version"]!r}')
           if not re.fullmatch(r'[0-9a-fA-F]{64}', m['sha256']):
               sys.exit('sha256 doit comporter 64 caractères hexadécimaux')
@@ -57,9 +57,11 @@ jobs:
               sys.exit('size doit être un entier >= 0')
           if not isinstance(m['release_notes'], list):
               sys.exit('release_notes doit être une liste')
+
           expected_image = f"MonOS-{m['version']}.img"
           if m['image'] != expected_image:
-              sys.exit(f"image doit être {expected_image}, reçu {m['image']!r}')
+              sys.exit(f"image doit être {expected_image}, reçu {m['image']!r}")
+
           if m['status'] != 'abandoned' or m['project_state'] != 'unfinished':
               sys.exit('Le projet doit être marqué abandoned/unfinished')
           if m['updates_enabled'] is not False or m['install_enabled'] is not False:
