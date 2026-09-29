@@ -1,0 +1,14 @@
+{
+  "test_name": "FAKE UPDATE — simulation uniquement",
+  "simulation": true,
+  "real_download": false,
+  "real_install": false,
+  "version": "99.99.99-FAKE",
+  "product": "Yoshi OS",
+  "status": "available",
+  "updates_enabled": true,
+  "install_enabled": true,
+  "image": "FAKE-NO-DOWNLOAD.img",
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "expected_result": "Ce fichier est uniquement un scénario de test. Le dépôt ne doit télécharger ni installer cette fausse mise à jour."
+}
