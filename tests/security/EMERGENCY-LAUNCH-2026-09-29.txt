@@ -1,0 +1,5 @@
+EMERGENCY SECURITY LAUNCH
+Date: 2026-09-29
+Mode: URGENT
+Expected: block downloads/installations and preserve existing files.
+This marker requests a GitHub Actions security check; it does not execute untrusted update code.
