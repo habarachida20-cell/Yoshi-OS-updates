@@ -9,7 +9,7 @@
 namespace monupd {
 
 // ---- Identite du produit ----
-static const char* kProduct          = "MonOS";
+static const char* kProduct          = "Yoshi OS";
 static const char* kRepoOwner        = "habarachida20-cell";
 static const char* kRepoName         = "Yoshi-OS-updates";
 static const char* kUpdateChannel    = "stable";
