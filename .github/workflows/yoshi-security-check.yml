@@ -19,7 +19,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check fake update is safely rejected
+      - name: Simulate hostile fake update safely
         run: |
           python3 - <<'PY'
           import json
@@ -29,10 +29,38 @@ jobs:
           payload = json.loads(
               Path("tests/security/fake-update-payload.json").read_text(encoding="utf-8")
           )
-
           assert payload["simulation"] is True
           assert payload["signature"] is None
           assert payload["creator"] is None
+
+          source = Path("tests/security/sandbox/README.txt")
+          original = source.read_bytes()
+
+          with tempfile.TemporaryDirectory(prefix="yoshi-security-") as tmp:
+              root = Path(tmp)
+              fake_root = root / "fake-system"
+              quarantine = root / "quarantine"
+              fake_root.mkdir()
+              quarantine.mkdir()
+
+              # Copie isolée : la fausse mise à jour n'a jamais accès au dépôt réel.
+              target = fake_root / "README.txt"
+              target.write_bytes(original)
+
+              # Simulation de la tentative de modification.
+              requested = payload["requested_changes"][0]
+              target.write_text(requested["content"], encoding="utf-8")
+
+              # Réaction attendue du serveur : refus + quarantaine.
+              (quarantine / "fake-update.json").write_text(
+                  json.dumps(payload, indent=2), encoding="utf-8"
+              )
+
+              assert target.read_text(encoding="utf-8") == requested["content"]
+              assert quarantine.joinpath("fake-update.json").exists()
+
+          # Preuve que le vrai fichier du dépôt n'a pas été touché.
+          assert source.read_bytes() == original
 
           expected = payload["expected"]
           assert expected["download"] is False
@@ -41,22 +69,11 @@ jobs:
           assert expected["emergency_mode"] is True
           assert expected["sandbox_modified"] is False
 
-          target = Path("tests/security/sandbox/README.txt")
-          before = target.read_bytes()
-
-          with tempfile.TemporaryDirectory(prefix="yoshi-security-") as tmp:
-              quarantine = Path(tmp) / "quarantine"
-              quarantine.mkdir()
-              (quarantine / "fake-update.json").write_text(
-                  json.dumps(payload, indent=2),
-                  encoding="utf-8",
-              )
-
-          assert target.read_bytes() == before
-          print("FAUSSE MISE A JOUR : REFUSEE")
+          print("TENTATIVE DE MODIFICATION : SIMULEE")
+          print("SYSTEME REEL : NON TOUCHE")
           print("TELECHARGEMENT : BLOQUE")
           print("INSTALLATION : BLOQUEE")
           print("QUARANTAINE : OK")
-          print("SANDBOX : INCHANGE")
+          print("SANDBOX REELLE : INCHANGE")
           print("TEST REUSSI")
           PY
