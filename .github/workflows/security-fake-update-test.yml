@@ -1,4 +1,4 @@
-name: Fake Update Security Test
+name: Yoshi OS Fake Update Security Test
 
 on:
   push:
@@ -8,49 +8,52 @@ on:
       - ".github/workflows/security-fake-update-test.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   fake-update:
+    name: Test fake update safely
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Check fake update fixture
+      - name: Validate fake update
         run: |
           python3 - <<'PY'
           import json
           from pathlib import Path
-          p = Path("tests/security/fake-update-payload.json")
-          data = json.loads(p.read_text())
+          data = json.loads(Path("tests/security/fake-update-payload.json").read_text(encoding="utf-8"))
           assert data["simulation"] is True
           assert data["signature"] is None
           assert data["creator"] is None
-          assert data["expected"]["download"] is False
-          assert data["expected"]["install"] is False
-          assert data["expected"]["quarantine"] is True
-          assert data["expected"]["emergency_mode"] is True
-          print("FAUSSE MISE A JOUR: détectée comme non signée.")
-          print("Téléchargement: BLOQUÉ")
-          print("Installation: BLOQUÉE")
-          print("Quarantaine: ACTIVÉE")
-          print("Mode urgence: ACTIVÉ")
-          PY
+          e = data["expected"]
+          assert e["download"] is False
+          assert e["install"] is False
+          assert e["quarantine"] is True
+          assert e["emergency_mode"] is True
+          assert e["sandbox_modified"] is False
+          print("FAUSSE MISE A JOUR : REFUSEE")
 
-      - name: Simulate modification attempt in sandbox
+      - name: Run isolated sandbox test
         run: |
           python3 - <<'PY'
-          import json
+          import json, tempfile
           from pathlib import Path
-
-          payload = json.loads(Path("tests/security/fake-update-payload.json").read_text())
+          payload = json.loads(Path("tests/security/fake-update-payload.json").read_text(encoding="utf-8"))
           target = Path("tests/security/sandbox/README.txt")
           before = target.read_bytes()
-
-          # Simulation uniquement : on NE modifie PAS la cible.
-          print("Tentative simulée:", payload["requested_changes"][0]["action"], payload["requested_changes"][0]["file"])
-          print("Modification réelle: BLOQUÉE")
-
-          after = target.read_bytes()
-          assert before == after, "ERREUR: le fichier sandbox a été modifié"
-          print("Fichier sandbox: INCHANGÉ")
-          print("Résultat: TEST DE SÉCURITÉ RÉUSSI")
+          with tempfile.TemporaryDirectory(prefix="yoshi-fake-update-") as d:
+              q = Path(d) / "quarantine"
+              q.mkdir()
+              if payload["signature"] is None:
+                  (q / "fake-update.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+          assert target.read_bytes() == before
+          print("Téléchargement : BLOQUE")
+          print("Installation : BLOQUEE")
+          print("Quarantaine : OK")
+          print("Sandbox : INCHANGE")
+          print("TEST REUSSI")
           PY
